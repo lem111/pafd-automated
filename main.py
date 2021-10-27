@@ -14,7 +14,7 @@ from PIL import Image, ImageEnhance
 
 
 from requests import session, post, adapters
- adapters.DEFAULT_RETRIES = 5
+adapters.DEFAULT_RETRIES = 5
 
 
 class Fudan:
