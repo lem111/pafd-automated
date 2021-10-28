@@ -1,4 +1,5 @@
 import json
+import sys
 import time
 import os
 from json import loads as json_loads
@@ -12,8 +13,8 @@ import io
 import numpy
 from PIL import Image, ImageEnhance
 
-
 from requests import session, post, adapters
+
 adapters.DEFAULT_RETRIES = 5
 
 
@@ -43,6 +44,26 @@ class Fudan:
         self.uid = uid
         self.psw = psw
         self.psh = psh
+        self.log = "运行日志：\n"
+
+    def notify(self, _title, _message=None):
+        if not self.psh:
+            print("未配置PUSH_KEY！")
+            self.log += "未配置PUSH_KEY！\n"
+            return
+
+        if not _message:
+            _message = _title
+
+        print(_title)
+        print(_message)
+
+        _response = post(f"https://sc.ftqq.com/{self.psh}.send", {"text": _title, "desp": _message})
+
+        if _response.status_code == 200:
+            print(f"发送通知状态：{_response.content.decode('utf-8')}")
+        else:
+            print(f"发送通知失败：{_response.status_code}")
 
     def _page_init(self):
         """
@@ -60,7 +81,8 @@ class Fudan:
             return page_login.text
         else:
             print("◉Fail to open Login Page, Check your Internet connection\n")
-            self.close()
+            self.log += "◉Fail to open Login Page, Check your Internet connection\n"
+            self.close(1)
 
     def login(self):
         """
@@ -105,9 +127,11 @@ class Fudan:
             print("\n************************"
                   "\n◉登录成功"
                   "\n************************\n")
+            self.log += "\n************************\n◉登录成功\n************************\n\n"
         else:
             print("◉登录失败，请检查账号信息")
-            self.close()
+            self.log += "◉登录失败，请检查账号信息\n"
+            self.close(1)
 
     def logout(self):
         """
@@ -119,8 +143,10 @@ class Fudan:
 
         if '01-Jan-1970' in expire:
             print("◉登出完毕")
+            self.log += "◉登出完毕\n"
         else:
             print("◉登出异常")
+            self.log += "◉登出异常\n"
 
     def close(self, exit_code=0):
         """
@@ -130,61 +156,54 @@ class Fudan:
         self.session.close()
         print("◉关闭会话")
         print("************************")
+        self.log += "◉关闭会话\n"
+        self.log += "************************\n"
+        if exit_code == 0:
+            self.notify("平安复旦：今日已打卡",self.log)
+        else:
+            self.notify("打卡失败！请手动打卡！",self.log)
         sys_exit(exit_code)
 
 
 class Zlapp(Fudan):
     last_info = ''
 
-    def notify(self, _title, _message=None):
-        if not self.psh:
-            print("未配置PUSH_KEY！")
-            return
-
-        if not _message:
-            _message = _title
-
-        print(_title)
-        print(_message)
-
-        _response = post(f"https://sc.ftqq.com/{self.psh}.send", {"text": _title, "desp": _message})
-
-        if _response.status_code == 200:
-            print(f"发送通知状态：{_response.content.decode('utf-8')}")
-        else:
-            print(f"发送通知失败：{_response.status_code}")
-        
     def check(self):
         """
         检查
         """
         print("◉检测是否已提交")
+        self.log += "◉检测是否已提交\n"
         get_info = self.session.get(
             'https://zlapp.fudan.edu.cn/ncov/wap/fudan/get-info')
         last_info = get_info.json()
 
         print("◉上一次提交日期为:", last_info["d"]["info"]["date"])
+        self.log += "◉上一次提交日期为:" + str({last_info["d"]["info"]["date"]})
 
         position = last_info["d"]["info"]['geo_api_info']
         position = json_loads(position)
 
         print("◉上一次提交地址为:", position['formattedAddress'])
+        self.log += "\n◉上一次提交地址为:" + str(position['formattedAddress'])
         # print("◉上一次提交GPS为", position["position"])
         # print(last_info)
-        
+
         # 改为上海时区
         os.environ['TZ'] = 'Asia/Shanghai'
         time.tzset()
         today = time.strftime("%Y%m%d", time.localtime())
         print("◉今日日期为:", today)
+        self.log += f"\n◉今日日期为:{today}\n\n"
         if last_info["d"]["info"]["date"] == today:
             print("\n*******今日已提交*******")
-            self.notify(f"平安复旦：今日已提交\n打卡地点:{position['formattedAddress']}")
+            self.log += "*******今日已提交*******\n"
             self.close()
         else:
             print("\n\n*******未提交*******")
+            self.log += "\n\n*******未提交*******"
             self.last_info = last_info["d"]["oldInfo"]
-            
+
     def read_captcha(self, img_byte):
         img = Image.open(io.BytesIO(img_byte)).convert('L')
         enh_bri = ImageEnhance.Brightness(img)
@@ -197,17 +216,17 @@ class Zlapp(Fudan):
         allow_list = list(character)
         allow_list.extend(list(character.lower()))
 
-        result = reader.recognize(image, 
-                                 allowlist=allow_list,
-                                 horizontal_list=horizontal_list[0],
-                                 free_list=free_list[0],
-                                 detail = 0)
+        result = reader.recognize(image,
+                                  allowlist=allow_list,
+                                  horizontal_list=horizontal_list[0],
+                                  free_list=free_list[0],
+                                  detail=0)
         return result[0]
 
     def validate_code(self):
         img = self.session.get(self.url_code).content
         return self.read_captcha(img)
-        
+
     def checkin(self):
         """
         提交
@@ -221,24 +240,27 @@ class Zlapp(Fudan):
         }
 
         print("\n\n◉◉提交中")
+        self.log += "\n\n◉◉提交中\n"
 
         geo_api_info = json_loads(self.last_info["geo_api_info"])
         province = self.last_info["province"]
         city = self.last_info["city"]
         district = geo_api_info["addressComponent"].get("district", "")
-        
-        while(True):
+
+        while (True):
             print("◉正在识别验证码......")
+            self.log += "◉正在识别验证码......\n"
             code = self.validate_code()
             print("◉验证码为:", code)
+            self.log += "◉验证码为:\n"
             self.last_info.update(
                 {
                     "tw": "13",
                     "province": province,
                     "city": city,
                     "area": " ".join((province, city, district)),
-                    #"sfzx": "1",  # 是否在校
-                    #"fxyy": "",  # 返校原因
+                    # "sfzx": "1",  # 是否在校
+                    # "fxyy": "",  # 返校原因
                     "code": code,
 
                 }
@@ -253,7 +275,7 @@ class Zlapp(Fudan):
             save_msg = json_loads(save.text)["m"]
             print(save_msg, '\n\n')
             time.sleep(0.1)
-            if(json_loads(save.text)["e"] != 1):
+            if (json_loads(save.text)["e"] != 1):
                 break
 
 
