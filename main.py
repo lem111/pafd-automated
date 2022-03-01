@@ -226,7 +226,7 @@ class Zlapp(Fudan):
     def validate_code(self):
         img = self.session.get(self.url_code).content
         return self.read_captcha(img)
-
+    
     def checkin(self):
         """
         提交
@@ -240,31 +240,45 @@ class Zlapp(Fudan):
         }
 
         print("\n\n◉◉提交中")
-        self.log += "\n\n◉◉提交中\n"
-
-        geo_api_info = json_loads(self.last_info["geo_api_info"])
+        
         province = self.last_info["province"]
         city = self.last_info["city"]
-        district = geo_api_info["addressComponent"].get("district", "")
-
-        while (True):
+        area = self.last_info["area"]
+        if area == "其他国家":
+            gwszdd = self.last_info["gwszdd"]
+        else:
+            geo_api_info = json_loads(self.last_info["geo_api_info"])
+            district = geo_api_info["addressComponent"].get("district", "")
+        
+        while(True):
             print("◉正在识别验证码......")
-            self.log += "◉正在识别验证码......\n"
             code = self.validate_code()
             print("◉验证码为:", code)
-            self.log += "◉验证码为:\n"
-            self.last_info.update(
-                {
-                    "tw": "13",
-                    "province": province,
-                    "city": city,
-                    "area": " ".join((province, city, district)),
-                    # "sfzx": "1",  # 是否在校
-                    # "fxyy": "",  # 返校原因
-                    "code": code,
-
-                }
-            )
+            if area == "其他国家":
+                self.last_info.update(
+                    {
+                        "tw": "13",
+                        "province": province,
+                        "city": city,
+                        "area": area,
+                        "gwszdd": gwszdd,
+                        #"sfzx": "1",  # 是否在校
+                        #"fxyy": "",  # 返校原因
+                        "code": code,
+                    }
+                )
+            else:
+                self.last_info.update(
+                    {
+                        "tw": "13",
+                        "province": province,
+                        "city": city,
+                        "area": " ".join((province, city, district)),
+                        #"sfzx": "1",  # 是否在校
+                        #"fxyy": "",  # 返校原因
+                        "code": code,
+                    }
+                )
             # print(self.last_info)
             save = self.session.post(
                 'https://zlapp.fudan.edu.cn/ncov/wap/fudan/save',
@@ -275,7 +289,7 @@ class Zlapp(Fudan):
             save_msg = json_loads(save.text)["m"]
             print(save_msg, '\n\n')
             time.sleep(0.1)
-            if (json_loads(save.text)["e"] != 1):
+            if(json_loads(save.text)["e"] != 1):
                 break
 
 
