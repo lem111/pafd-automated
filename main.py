@@ -279,6 +279,14 @@ class Zlapp(Fudan):
                         "code": code,
                     }
                 )
+            if province == "上海市":
+                self.last_info.update(
+                    {
+                        "province": "上海市",
+                        "city" : "上海市",
+                        "area" : " ".join(("上海市", "杨浦区"))
+                    }
+                )
             # print(self.last_info)
             save = self.session.post(
                 'https://zlapp.fudan.edu.cn/ncov/wap/fudan/save',
